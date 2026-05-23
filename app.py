@@ -1,155 +1,127 @@
 import streamlit as st
 import pandas as pd
-import plotly.graph_objects as go
+import plotly.express as px
+import io
 
-# ── Configuração da página ──────────────────────────────────────────────────
-st.set_page_config(
-    page_title="Dashboard de Vendas",
-    page_icon="📊",
-    layout="wide",
-)
+st.set_page_config(page_title=“CSV Visualizer”, page_icon=“📊”, layout=“wide”)
 
-# ── Estilo customizado ──────────────────────────────────────────────────────
-st.markdown("""
+st.markdown(”””
+
 <style>
-    @import url('https://fonts.googleapis.com/css2?family=Syne:wght@400;700;800&family=Inter:wght@300;400;500&display=swap');
-
-    html, body, [class*="css"] {
-        font-family: 'Inter', sans-serif;
-    }
-    h1, h2, h3 {
-        font-family: 'Syne', sans-serif !important;
-    }
-    .stApp {
-        background: linear-gradient(135deg, #0f0c29, #302b63, #24243e);
-    }
-    .metric-card {
-        background: rgba(255,255,255,0.07);
-        border: 1px solid rgba(255,255,255,0.15);
-        border-radius: 16px;
-        padding: 20px 24px;
-        backdrop-filter: blur(10px);
-    }
-    .metric-label {
-        font-size: 0.78rem;
-        color: rgba(255,255,255,0.55);
-        text-transform: uppercase;
-        letter-spacing: 1.5px;
-        margin-bottom: 4px;
-    }
-    .metric-value {
-        font-family: 'Syne', sans-serif;
-        font-size: 1.9rem;
-        font-weight: 800;
-        color: #fff;
-    }
-    .metric-delta {
-        font-size: 0.82rem;
-        color: #6ee7b7;
-        margin-top: 2px;
-    }
+@import url('https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=DM+Sans:wght@300;400;600&display=swap');
+html, body, [class*="css"] { font-family: 'DM Sans', sans-serif; }
+h1, h2, h3 { font-family: 'Space Mono', monospace !important; }
+.stApp { background: #0d0d0d; color: #f0f0f0; }
+section[data-testid="stSidebar"] { background: #161616; border-right: 1px solid #2a2a2a; }
+.metric-card { background: #1a1a1a; border: 1px solid #2e2e2e; border-radius: 12px; padding: 1.2rem 1.5rem; text-align: center; }
+.metric-card .label { font-size: 0.75rem; color: #888; text-transform: uppercase; letter-spacing: 0.1em; font-family: 'Space Mono', monospace; }
+.metric-card .value { font-size: 2rem; font-weight: 700; color: #00ff87; font-family: 'Space Mono', monospace; }
 </style>
-""", unsafe_allow_html=True)
 
-# ── Cabeçalho ───────────────────────────────────────────────────────────────
-st.markdown("## 📊 Dashboard de Vendas Anuais")
-st.markdown("Visualização interativa gerada a partir de um arquivo **CSV**.")
-st.markdown("---")
+“””, unsafe_allow_html=True)
 
-# ── Upload ou uso do CSV padrão ─────────────────────────────────────────────
-uploaded = st.file_uploader("📁 Faça upload de um CSV (opcional)", type=["csv"])
+st.markdown(”# 📊 CSV Visualizer”)
+st.markdown(”<p style='color:#666; font-size:0.95rem; margin-top:-0.5rem;'>Faça upload de um arquivo CSV e explore seus dados com gráficos interativos.</p>”, unsafe_allow_html=True)
+st.markdown(”—”)
 
-if uploaded:
-    df = pd.read_csv(uploaded)
-    st.success(f"Arquivo **{uploaded.name}** carregado com sucesso!")
+with st.sidebar:
+st.markdown(”### ⚙️ Configurações”)
+uploaded_file = st.file_uploader(“Carregar arquivo CSV”, type=[“csv”])
+separator = st.selectbox(“Separador”, [”,”, “;”, “|”, “\t”], index=0)
+encoding = st.selectbox(“Encoding”, [“utf-8”, “latin-1”, “utf-16”], index=0)
+st.markdown(”—”)
+st.markdown(”<p style='font-size:0.75rem; color:#555;'>Desenvolvido com Streamlit + Plotly</p>”, unsafe_allow_html=True)
+
+SAMPLE_CSV = “”“Mes,Vendas,Custo,Lucro,Regiao
+Jan,15000,9000,6000,Norte
+Fev,18000,10500,7500,Sul
+Mar,13000,8000,5000,Norte
+Abr,21000,12000,9000,Leste
+Mai,25000,14000,11000,Sul
+Jun,22000,13000,9000,Oeste
+Jul,19000,11000,8000,Norte
+Ago,28000,16000,12000,Leste
+Set,24000,14000,10000,Sul
+Out,30000,17000,13000,Oeste
+Nov,35000,20000,15000,Leste
+Dez,40000,23000,17000,Sul
+“””
+
+if uploaded_file is not None:
+sep = “\t” if separator == “\t” else separator
+try:
+df = pd.read_csv(uploaded_file, sep=sep, encoding=encoding)
+source_label = f”📂 {uploaded_file.name}”
+except Exception as e:
+st.error(f”Erro ao ler o arquivo: {e}”)
+st.stop()
 else:
-    df = pd.read_csv("dados.csv")
-    st.info("Usando o arquivo **dados.csv** de exemplo. Você pode fazer upload do seu próprio CSV acima.")
+df = pd.read_csv(io.StringIO(SAMPLE_CSV))
+source_label = “📄 Dados de exemplo (carregue seu CSV na barra lateral)”
 
-# ── Preview do dado ─────────────────────────────────────────────────────────
-with st.expander("🔍 Visualizar dados brutos"):
-    st.dataframe(df, use_container_width=True)
+st.caption(source_label)
 
-st.markdown("### 📈 Gráfico de Área — Vendas, Despesas e Lucro")
+num_cols = df.select_dtypes(include=“number”).columns.tolist()
+cat_cols = df.select_dtypes(exclude=“number”).columns.tolist()
 
-# ── Seletor de colunas ───────────────────────────────────────────────────────
-colunas_numericas = df.select_dtypes(include="number").columns.tolist()
-colunas_texto     = df.select_dtypes(exclude="number").columns.tolist()
+col1, col2, col3, col4 = st.columns(4)
+with col1:
+st.markdown(f’<div class="metric-card"><div class="label">Linhas</div><div class="value">{len(df):,}</div></div>’, unsafe_allow_html=True)
+with col2:
+st.markdown(f’<div class="metric-card"><div class="label">Colunas</div><div class="value">{len(df.columns)}</div></div>’, unsafe_allow_html=True)
+with col3:
+st.markdown(f’<div class="metric-card"><div class="label">Numéricas</div><div class="value">{len(num_cols)}</div></div>’, unsafe_allow_html=True)
+with col4:
+st.markdown(f’<div class="metric-card"><div class="label">Categóricas</div><div class="value">{len(cat_cols)}</div></div>’, unsafe_allow_html=True)
 
-col_x = st.selectbox("Eixo X (categoria)", options=colunas_texto + colunas_numericas,
-                     index=0 if colunas_texto else 0)
+st.markdown(”<br>”, unsafe_allow_html=True)
 
-col_y = st.multiselect("Séries (eixo Y)", options=colunas_numericas,
-                       default=colunas_numericas[:3] if len(colunas_numericas) >= 3 else colunas_numericas)
+tab1, tab2, tab3 = st.tabs([“📈 Gráficos”, “🗃️ Dados”, “📋 Estatísticas”])
 
-if not col_y:
-    st.warning("Selecione ao menos uma série para o gráfico.")
-    st.stop()
+with tab1:
+if not num_cols:
+st.warning(“Nenhuma coluna numérica encontrada para criar gráficos.”)
+else:
+left, right = st.columns([1, 2])
+with left:
+chart_type = st.radio(“Tipo de gráfico”, [“Linha”, “Barras”, “Dispersão”, “Pizza”, “Histograma”, “Box Plot”])
+y_col = st.selectbox(“Eixo Y (valores)”, num_cols)
+x_col = st.selectbox(“Eixo X”, df.columns.tolist(), index=0)
+color_col = st.selectbox(“Cor por categoria (opcional)”, [”— Nenhuma —”] + cat_cols)
+color_arg = None if color_col == “— Nenhuma —” else color_col
 
-# ── Paleta de cores ──────────────────────────────────────────────────────────
-CORES = ["#818cf8", "#34d399", "#f472b6", "#fb923c", "#facc15"]
-
-# ── Gráfico de Área com Plotly ───────────────────────────────────────────────
-fig = go.Figure()
-
-for i, serie in enumerate(col_y):
-    cor = CORES[i % len(CORES)]
-    fig.add_trace(go.Scatter(
-        x=df[col_x],
-        y=df[serie],
-        name=serie.capitalize(),
-        mode="lines",
-        fill="tozeroy",
-        line=dict(color=cor, width=2.5),
-        fillcolor=cor.replace(")", ", 0.15)").replace("rgb", "rgba") if "rgb" in cor
-                  else cor + "26",  # hex + 15% alpha
-        hovertemplate=f"<b>%{{x}}</b><br>{serie.capitalize()}: R$ %{{y:,.0f}}<extra></extra>",
-    ))
-
-fig.update_layout(
-    plot_bgcolor="rgba(0,0,0,0)",
-    paper_bgcolor="rgba(0,0,0,0)",
-    font=dict(color="rgba(255,255,255,0.8)", family="Inter"),
-    legend=dict(
-        orientation="h", y=1.08, x=0.5, xanchor="center",
-        bgcolor="rgba(255,255,255,0.05)",
-        bordercolor="rgba(255,255,255,0.1)",
-        borderwidth=1,
-    ),
-    xaxis=dict(
-        gridcolor="rgba(255,255,255,0.06)",
-        linecolor="rgba(255,255,255,0.1)",
-    ),
-    yaxis=dict(
-        gridcolor="rgba(255,255,255,0.06)",
-        linecolor="rgba(255,255,255,0.1)",
-        tickprefix="R$ ",
-        tickformat=",.0f",
-    ),
-    margin=dict(t=40, b=20, l=10, r=10),
-    height=420,
-    hovermode="x unified",
-)
-
+```
+DARK_TEMPLATE = "plotly_dark"
+with right:
+fig = None
+if chart_type == "Linha":
+fig = px.line(df, x=x_col, y=y_col, color=color_arg, template=DARK_TEMPLATE, markers=True, color_discrete_sequence=px.colors.qualitative.Safe)
+elif chart_type == "Barras":
+fig = px.bar(df, x=x_col, y=y_col, color=color_arg, template=DARK_TEMPLATE, barmode="group", color_discrete_sequence=px.colors.qualitative.Safe)
+elif chart_type == "Dispersão":
+fig = px.scatter(df, x=x_col, y=y_col, color=color_arg, template=DARK_TEMPLATE, color_discrete_sequence=px.colors.qualitative.Safe)
+elif chart_type == "Pizza":
+fig = px.pie(df, names=x_col, values=y_col, template=DARK_TEMPLATE, color_discrete_sequence=px.colors.qualitative.Safe)
+elif chart_type == "Histograma":
+fig = px.histogram(df, x=y_col, color=color_arg, template=DARK_TEMPLATE, nbins=20, color_discrete_sequence=px.colors.qualitative.Safe)
+elif chart_type == "Box Plot":
+fig = px.box(df, x=color_arg, y=y_col, template=DARK_TEMPLATE, color_discrete_sequence=px.colors.qualitative.Safe)
+if fig:
+fig.update_layout(paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)", font_family="DM Sans", margin=dict(t=30, b=30, l=10, r=10))
 st.plotly_chart(fig, use_container_width=True)
+```
 
-# ── Cards de métricas ────────────────────────────────────────────────────────
-st.markdown("### 🧮 Resumo do Período")
-cols = st.columns(len(col_y))
+with tab2:
+search = st.text_input(“🔍 Filtrar por valor (busca em texto)”)
+display_df = df.copy()
+if search:
+mask = display_df.astype(str).apply(lambda col: col.str.contains(search, case=False)).any(axis=1)
+display_df = display_df[mask]
+st.dataframe(display_df, use_container_width=True, height=420)
+st.download_button(“⬇️ Baixar CSV filtrado”, display_df.to_csv(index=False).encode(“utf-8”), “dados_filtrados.csv”, “text/csv”)
 
-for i, (col, serie in zip(cols, col_y)):
-    total  = df[serie].sum()
-    media  = df[serie].mean()
-    maximo = df[serie].max()
-    col.markdown(f"""
-    <div class="metric-card">
-        <div class="metric-label">{serie.capitalize()}</div>
-        <div class="metric-value">R$ {total:,.0f}</div>
-        <div class="metric-delta">
-            Média: R$ {media:,.0f} &nbsp;|&nbsp; Pico: R$ {maximo:,.0f}
-        </div>
-    </div>
-    """, unsafe_allow_html=True)
-
-st.markdown("<br>", unsafe_allow_html=True)
-st.caption("Desenvolvido com Streamlit + Plotly | Aula 18 — Gráficos")
+with tab3:
+if num_cols:
+st.dataframe(df[num_cols].describe().T.style.format(”{:.2f}”), use_container_width=True)
+else:
+st.info(“Nenhuma coluna numérica disponível para estatísticas.”)
